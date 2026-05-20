@@ -952,12 +952,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         base_url: str | None,
         tools: list[Any],
     ) -> list[Any]:
-        """Remove fragile auxiliary tools for OpenAI-compatible SIRB models."""
+        """Remove fragile structured tools for OpenAI-compatible SIRB models."""
         is_sirb = (base_url or '').rstrip('/') == SIRB_API_BASE
         if not is_sirb and model not in {'qwen3-coder-next', 'openai/qwen3-coder-next'}:
             return tools
 
-        return [tool for tool in tools if getattr(tool, 'name', None) != 'task_tracker']
+        fragile_tools = {'task_tracker', 'file_editor'}
+        return [
+            tool for tool in tools if getattr(tool, 'name', None) not in fragile_tools
+        ]
 
     async def _add_system_mcp_servers(
         self, mcp_servers: dict[str, Any], conversation_id: UUID
