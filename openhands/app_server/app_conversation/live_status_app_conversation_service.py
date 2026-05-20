@@ -946,6 +946,19 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         return include_default_tools
 
+    @staticmethod
+    def _tools_for_llm(
+        model: str | None,
+        base_url: str | None,
+        tools: list[Any],
+    ) -> list[Any]:
+        """Remove fragile auxiliary tools for OpenAI-compatible SIRB models."""
+        is_sirb = (base_url or '').rstrip('/') == SIRB_API_BASE
+        if not is_sirb and model not in {'qwen3-coder-next', 'openai/qwen3-coder-next'}:
+            return tools
+
+        return [tool for tool in tools if getattr(tool, 'name', None) != 'task_tracker']
+
     async def _add_system_mcp_servers(
         self, mcp_servers: dict[str, Any], conversation_id: UUID
     ) -> None:
@@ -1343,6 +1356,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 enable_browser=True,
                 enable_sub_agents=user.agent_settings.enable_sub_agents,
             )
+            tools = self._tools_for_llm(llm.model, llm.base_url, tools)
             if user.agent_settings.enable_sub_agents:
                 agent_definitions = list(get_registered_agent_definitions())
 

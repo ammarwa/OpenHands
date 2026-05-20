@@ -615,6 +615,29 @@ class TestLiveStatusAppConversationService:
             'openai/gpt-4o', None, ['FinishTool', 'ThinkTool']
         ) == ['FinishTool', 'ThinkTool']
 
+    def test_tools_for_sirb_filters_task_tracker(self):
+        tools = [
+            SimpleNamespace(name='terminal'),
+            SimpleNamespace(name='task_tracker'),
+            SimpleNamespace(name='file_editor'),
+        ]
+
+        filtered = self.service._tools_for_llm(
+            'openai/qwen3-coder-next', 'https://api.sirb.run/v1', tools
+        )
+
+        assert [tool.name for tool in filtered] == ['terminal', 'file_editor']
+
+    def test_tools_for_other_models_preserves_task_tracker(self):
+        tools = [
+            SimpleNamespace(name='terminal'),
+            SimpleNamespace(name='task_tracker'),
+        ]
+
+        filtered = self.service._tools_for_llm('openai/gpt-4o', None, tools)
+
+        assert filtered == tools
+
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_openhands_model_uses_user_base_url(
         self,
