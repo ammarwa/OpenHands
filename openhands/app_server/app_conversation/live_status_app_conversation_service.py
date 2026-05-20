@@ -921,12 +921,26 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             provider_base_url=self.openhands_provider_base_url,
         )
 
-        return LLM(
-            model=model,
-            base_url=base_url,
-            api_key=user.agent_settings.llm.api_key,
-            usage_id='agent',
+        return user.agent_settings.llm.model_copy(
+            update={
+                'model': model,
+                'base_url': base_url,
+                'api_key': user.agent_settings.llm.api_key,
+                'usage_id': 'agent',
+            }
         )
+
+    @staticmethod
+    def _default_tools_for_llm(
+        model: str | None, include_default_tools: list[str] | None
+    ) -> list[str] | None:
+        """Apply compatibility defaults for LLMs with fragile tool JSON output."""
+        if model in {'qwen3-coder-next', 'openai/qwen3-coder-next'}:
+            default_tools = include_default_tools or ['FinishTool']
+            filtered_tools = [tool for tool in default_tools if tool != 'ThinkTool']
+            return filtered_tools or ['FinishTool']
+
+        return include_default_tools
 
     async def _add_system_mcp_servers(
         self, mcp_servers: dict[str, Any], conversation_id: UUID
@@ -1343,6 +1357,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             }
         )
         agent = configured_agent_settings.create_agent()
+        agent = agent.model_copy(
+            update={
+                'include_default_tools': self._default_tools_for_llm(
+                    llm.model, agent.include_default_tools
+                )
+            }
+        )
         agent = self._apply_server_agent_overrides(
             agent, agent_type, mcp_config, conversation_id, user.id
         )

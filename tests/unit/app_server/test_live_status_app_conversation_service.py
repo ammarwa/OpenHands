@@ -567,6 +567,50 @@ class TestLiveStatusAppConversationService:
         assert llm.base_url == 'https://sdk-llm.example.com'
 
     @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_preserves_custom_llm_settings(self):
+        """Custom provider flags should survive app-server LLM configuration."""
+        self.mock_user.agent_settings = OpenHandsAgentSettings(
+            llm=LLM(
+                model='openai/qwen3-coder-next',
+                api_key=SecretStr('test-key'),
+                base_url='https://api.sirb.run/v1',
+                force_string_serializer=True,
+                native_tool_calling=True,
+                disable_vision=True,
+                caching_prompt=False,
+                drop_params=True,
+                modify_params=True,
+            )
+        )
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, None, self.conversation_id
+        )
+
+        assert llm.model == 'openai/qwen3-coder-next'
+        assert llm.base_url == 'https://api.sirb.run/v1'
+        assert llm.force_string_serializer is True
+        assert llm.native_tool_calling is True
+        assert llm.disable_vision is True
+        assert llm.caching_prompt is False
+        assert llm.drop_params is True
+        assert llm.modify_params is True
+
+    def test_default_tools_for_qwen_filters_think_tool(self):
+        assert self.service._default_tools_for_llm(
+            'openai/qwen3-coder-next', ['FinishTool', 'ThinkTool']
+        ) == ['FinishTool']
+        assert self.service._default_tools_for_llm(
+            'qwen3-coder-next', None
+        ) == ['FinishTool']
+
+    def test_default_tools_for_other_models_preserves_default_tools(self):
+        assert self.service._default_tools_for_llm(
+            'openai/gpt-4o', ['FinishTool', 'ThinkTool']
+        ) == ['FinishTool', 'ThinkTool']
+
+    @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_openhands_model_uses_user_base_url(
         self,
     ):
