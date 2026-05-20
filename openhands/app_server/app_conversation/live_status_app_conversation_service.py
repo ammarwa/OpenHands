@@ -957,7 +957,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not is_sirb and model not in {'qwen3-coder-next', 'openai/qwen3-coder-next'}:
             return tools
 
-        fragile_tools = {'task_tracker', 'file_editor'}
+        fragile_tools = {
+            'browser_tool_set',
+            'file_editor',
+            'task_tool_set',
+            'task_tracker',
+        }
         return [
             tool for tool in tools if getattr(tool, 'name', None) not in fragile_tools
         ]

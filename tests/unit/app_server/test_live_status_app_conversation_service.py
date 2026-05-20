@@ -615,19 +615,20 @@ class TestLiveStatusAppConversationService:
             'openai/gpt-4o', None, ['FinishTool', 'ThinkTool']
         ) == ['FinishTool', 'ThinkTool']
 
-    def test_tools_for_sirb_filters_task_tracker(self):
+    def test_tools_for_sirb_keeps_only_terminal(self):
         tools = [
             SimpleNamespace(name='terminal'),
             SimpleNamespace(name='task_tracker'),
             SimpleNamespace(name='file_editor'),
             SimpleNamespace(name='browser_tool_set'),
+            SimpleNamespace(name='task_tool_set'),
         ]
 
         filtered = self.service._tools_for_llm(
             'openai/qwen3-coder-next', 'https://api.sirb.run/v1', tools
         )
 
-        assert [tool.name for tool in filtered] == ['terminal', 'browser_tool_set']
+        assert [tool.name for tool in filtered] == ['terminal']
 
     def test_tools_for_other_models_preserves_task_tracker(self):
         tools = [
