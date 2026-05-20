@@ -940,9 +940,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         """Apply compatibility defaults for LLMs with fragile tool JSON output."""
         is_sirb = (base_url or '').rstrip('/') == SIRB_API_BASE
         if is_sirb or model in {'qwen3-coder-next', 'openai/qwen3-coder-next'}:
-            default_tools = include_default_tools or ['FinishTool']
-            filtered_tools = [tool for tool in default_tools if tool != 'ThinkTool']
-            return filtered_tools or ['FinishTool']
+            default_tools = include_default_tools or []
+            return [
+                tool
+                for tool in default_tools
+                if tool not in {'FinishTool', 'ThinkTool'}
+            ]
 
         return include_default_tools
 
