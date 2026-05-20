@@ -40,6 +40,9 @@ from openhands.app_server.settings.settings_models import (
     SandboxGroupingStrategy,
     Settings,
 )
+from openhands.app_server.utils.tool_call_argument_compat import (
+    parse_tool_call_arguments_compat,
+)
 from openhands.app_server.user.user_context import UserContext
 from openhands.sdk import Agent, Event
 from openhands.sdk.llm import LLM
@@ -597,23 +600,23 @@ class TestLiveStatusAppConversationService:
         assert llm.drop_params is True
         assert llm.modify_params is True
 
-    def test_default_tools_for_qwen_filters_think_tool(self):
+    def test_default_tools_for_qwen_preserves_default_tools(self):
         assert self.service._default_tools_for_llm(
             'openai/qwen3-coder-next', None, ['FinishTool', 'ThinkTool']
-        ) == []
-        assert self.service._default_tools_for_llm('qwen3-coder-next', None, None) == []
+        ) == ['FinishTool', 'ThinkTool']
+        assert self.service._default_tools_for_llm('qwen3-coder-next', None, None) is None
         assert self.service._default_tools_for_llm(
             'openai/another-sirb-model',
             'https://api.sirb.run/v1',
             ['FinishTool', 'ThinkTool'],
-        ) == []
+        ) == ['FinishTool', 'ThinkTool']
 
     def test_default_tools_for_other_models_preserves_default_tools(self):
         assert self.service._default_tools_for_llm(
             'openai/gpt-4o', None, ['FinishTool', 'ThinkTool']
         ) == ['FinishTool', 'ThinkTool']
 
-    def test_tools_for_sirb_keeps_only_terminal(self):
+    def test_tools_for_sirb_preserves_available_tools(self):
         tools = [
             SimpleNamespace(name='terminal'),
             SimpleNamespace(name='task_tracker'),
@@ -626,7 +629,19 @@ class TestLiveStatusAppConversationService:
             'openai/qwen3-coder-next', 'https://api.sirb.run/v1', tools
         )
 
-        assert [tool.name for tool in filtered] == ['terminal']
+        assert filtered == tools
+
+    def test_tool_call_argument_parser_repairs_truncated_string_value(self):
+        parsed = parse_tool_call_arguments_compat('{"command": "echo hello')
+
+        assert parsed == {'command': 'echo hello'}
+
+    def test_tool_call_argument_parser_repairs_dangling_value(self):
+        parsed = parse_tool_call_arguments_compat(
+            '{"command": "echo hello", "summary":'
+        )
+
+        assert parsed == {'command': 'echo hello', 'summary': ''}
 
     def test_tools_for_other_models_preserves_task_tracker(self):
         tools = [

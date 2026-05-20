@@ -89,10 +89,12 @@ from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
 from openhands.app_server.utils.git import ensure_valid_git_branch_name
-from openhands.app_server.utils.llm import SIRB_API_BASE
 from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
+)
+from openhands.app_server.utils.tool_call_argument_compat import (
+    install_tool_call_argument_compat,
 )
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.hooks import HookConfig
@@ -119,6 +121,7 @@ from openhands.tools.preset.planning import (
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
+install_tool_call_argument_compat()
 
 
 # Planning agent instruction to prevent "Ready to proceed?" behavior
@@ -938,15 +941,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         include_default_tools: list[str] | None,
     ) -> list[str] | None:
         """Apply compatibility defaults for LLMs with fragile tool JSON output."""
-        is_sirb = (base_url or '').rstrip('/') == SIRB_API_BASE
-        if is_sirb or model in {'qwen3-coder-next', 'openai/qwen3-coder-next'}:
-            default_tools = include_default_tools or []
-            return [
-                tool
-                for tool in default_tools
-                if tool not in {'FinishTool', 'ThinkTool'}
-            ]
-
         return include_default_tools
 
     @staticmethod
@@ -955,20 +949,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         base_url: str | None,
         tools: list[Any],
     ) -> list[Any]:
-        """Remove fragile structured tools for OpenAI-compatible SIRB models."""
-        is_sirb = (base_url or '').rstrip('/') == SIRB_API_BASE
-        if not is_sirb and model not in {'qwen3-coder-next', 'openai/qwen3-coder-next'}:
-            return tools
-
-        fragile_tools = {
-            'browser_tool_set',
-            'file_editor',
-            'task_tool_set',
-            'task_tracker',
-        }
-        return [
-            tool for tool in tools if getattr(tool, 'name', None) not in fragile_tools
-        ]
+        """Apply provider-specific tool compatibility filters."""
+        return tools
 
     async def _add_system_mcp_servers(
         self, mcp_servers: dict[str, Any], conversation_id: UUID
