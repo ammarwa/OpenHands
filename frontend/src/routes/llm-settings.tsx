@@ -40,9 +40,12 @@ import { ProfileNameInput } from "#/components/features/settings/profile-name-in
 import { Typography } from "#/ui/typography";
 
 const LLM_EXCLUDED_KEYS = new Set(["llm.model", "llm.api_key", "llm.base_url"]);
+const SIRB_PROVIDER = "sirb";
+const SIRB_BASE_URL = "https://api.sirb.run/v1";
 
 const buildModelId = (provider: string | null, model: string | null) => {
   if (!provider || !model) return null;
+  if (provider === SIRB_PROVIDER) return `openai/${model}`;
   return `${provider}/${model}`;
 };
 
@@ -64,6 +67,7 @@ const KNOWN_PROVIDER_DEFAULT_BASE_URLS: Partial<Record<string, Set<string>>> = {
     "https://llm-proxy.app.all-hands.dev",
     "https://llm-proxy.app.all-hands.dev/v1",
   ]),
+  sirb: new Set([SIRB_BASE_URL]),
 };
 
 const normalizeBaseUrl = (baseUrl: string) => {
@@ -90,6 +94,16 @@ const isProviderDefaultBaseUrl = (model: string, baseUrl: string) => {
   return Object.values(KNOWN_PROVIDER_DEFAULT_BASE_URLS).some((knownDefaults) =>
     knownDefaults?.has(normalizedBaseUrl),
   );
+};
+
+const isSirbBaseUrl = (baseUrl: string | null | undefined) =>
+  normalizeBaseUrl(baseUrl ?? "") === SIRB_BASE_URL;
+
+const toDisplayModel = (model: string, baseUrl: string) => {
+  if (isSirbBaseUrl(baseUrl) && model.startsWith("openai/")) {
+    return `${SIRB_PROVIDER}/${model.replace(/^openai\//, "")}`;
+  }
+  return model;
 };
 
 export function LlmSettingsScreen({
@@ -214,12 +228,13 @@ export function LlmSettingsScreen({
 
   const buildHeader = React.useCallback(
     ({ values, isDisabled, view, onChange }: SdkSectionHeaderProps) => {
-      const modelValue =
+      const rawModelValue =
         typeof values["llm.model"] === "string" ? values["llm.model"] : "";
       const baseUrlValue =
         typeof values["llm.base_url"] === "string"
           ? values["llm.base_url"]
           : "";
+      const modelValue = toDisplayModel(rawModelValue, baseUrlValue);
       const derivedProvider = modelValue
         ? extractModelAndProvider(modelValue).provider || null
         : null;
@@ -269,7 +284,7 @@ export function LlmSettingsScreen({
       };
 
       const profileNamePlaceholder =
-        deriveProfileNameFromModel(modelValue) ?? "";
+        deriveProfileNameFromModel(rawModelValue) ?? "";
 
       return (
         <div className="flex flex-col gap-6">
@@ -306,6 +321,10 @@ export function LlmSettingsScreen({
                   const nextModel = buildModelId(provider, model);
                   if (nextModel) {
                     onChange("llm.model", nextModel);
+                    onChange(
+                      "llm.base_url",
+                      provider === SIRB_PROVIDER ? SIRB_BASE_URL : "",
+                    );
                   }
                 }}
                 wrapperClassName="!flex-col !gap-6"
@@ -388,10 +407,15 @@ export function LlmSettingsScreen({
         (defaultPayload.agent_settings_diff as Record<string, unknown>) ?? {},
       );
 
-      const modelValue =
+      const rawModelValue =
         typeof context.values["llm.model"] === "string"
           ? context.values["llm.model"]
           : "";
+      const currentBaseUrl =
+        typeof context.values["llm.base_url"] === "string"
+          ? context.values["llm.base_url"]
+          : "";
+      const modelValue = toDisplayModel(rawModelValue, currentBaseUrl);
       const derivedProvider = modelValue
         ? extractModelAndProvider(modelValue).provider || null
         : null;
@@ -409,7 +433,24 @@ export function LlmSettingsScreen({
       }
 
       if (context.view === "basic") {
-        llm.base_url = getSchemaFieldDefaultValue(schema, "llm.base_url");
+        llm.base_url =
+          activeProvider === SIRB_PROVIDER
+            ? SIRB_BASE_URL
+            : getSchemaFieldDefaultValue(schema, "llm.base_url");
+        agentSettings.llm = llm;
+      }
+
+      if (
+        activeProvider === SIRB_PROVIDER ||
+        isSirbBaseUrl(String(llm.base_url ?? ""))
+      ) {
+        llm.base_url = SIRB_BASE_URL;
+        llm.force_string_serializer = true;
+        llm.native_tool_calling = true;
+        llm.disable_vision = true;
+        llm.caching_prompt = false;
+        llm.drop_params = true;
+        llm.modify_params = true;
         agentSettings.llm = llm;
       }
 
@@ -419,7 +460,7 @@ export function LlmSettingsScreen({
       // falling back to ``context.values`` makes the profile auto-creation
       // fire on same-value re-saves (e.g. save → delete profile → save
       // again).
-      lastSavedModelRef.current = modelValue || null;
+      lastSavedModelRef.current = rawModelValue || null;
 
       return { agent_settings_diff: agentSettings };
     },

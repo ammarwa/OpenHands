@@ -236,6 +236,35 @@ async def test_store_settings_rejects_legacy_nested_payload_keys(test_client):
 
 
 @pytest.mark.asyncio
+async def test_store_settings_normalizes_sirb_provider(test_client):
+    response = test_client.post(
+        '/api/v1/settings',
+        json={
+            'agent_settings_diff': {
+                'llm': {
+                    'model': 'sirb/qwen3-coder-next',
+                    'api_key': 'test-key',
+                }
+            }
+        },
+    )
+    assert response.status_code == 200
+
+    response = test_client.get('/api/v1/settings')
+    assert response.status_code == 200
+    llm = response.json()['agent_settings']['llm']
+    assert llm['model'] == 'sirb/qwen3-coder-next'
+    assert llm['base_url'] is None
+
+    assert llm['force_string_serializer'] is True
+    assert llm['native_tool_calling'] is True
+    assert llm['disable_vision'] is True
+    assert llm['caching_prompt'] is False
+    assert llm['drop_params'] is True
+    assert llm['modify_params'] is True
+
+
+@pytest.mark.asyncio
 async def test_saving_settings_with_frozen_secrets_store(test_client):
     """Regression: POSTing settings must not fail with `secrets_store`.
 

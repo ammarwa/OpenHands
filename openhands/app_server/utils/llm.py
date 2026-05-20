@@ -52,6 +52,12 @@ CLARIFAI_MODELS = [
     'clarifai/moonshotai.kimi.Kimi-K2-Instruct',
 ]
 
+SIRB_PROVIDER = 'sirb'
+SIRB_API_BASE = 'https://api.sirb.run/v1'
+SIRB_MODELS = [
+    f'{SIRB_PROVIDER}/qwen3-coder-next',
+]
+
 # ---------------------------------------------------------------------------
 # Provider-assignment tables — derived from the SDK.
 #
@@ -152,6 +158,8 @@ def resolve_llm_base_url(
         return base_url
     if not model:
         return None
+    if model.startswith(f'{SIRB_PROVIDER}/'):
+        return SIRB_API_BASE
     if is_openhands_model(model):
         return managed_proxy_url
     try:
@@ -291,7 +299,10 @@ def get_supported_llm_models(
 
     # Assign canonical provider prefixes to bare LiteLLM names, then dedupe.
     all_models = (
-        openhands_models + CLARIFAI_MODELS + [_assign_provider(m) for m in model_list]
+        openhands_models
+        + SIRB_MODELS
+        + CLARIFAI_MODELS
+        + [_assign_provider(m) for m in model_list]
     )
     unique_models = sorted(set(all_models))
 

@@ -238,10 +238,19 @@ class DockerSandboxService(SandboxService):
             and sandbox_info.exposed_urls
         ):
             app_server_url = next(
-                exposed_url.url
-                for exposed_url in sandbox_info.exposed_urls
-                if exposed_url.name == AGENT_SERVER
+                (
+                    exposed_url.url
+                    for exposed_url in sandbox_info.exposed_urls
+                    if exposed_url.name == AGENT_SERVER
+                ),
+                None,
             )
+            if app_server_url is None:
+                _logger.debug('Sandbox agent server port is not yet available')
+                sandbox_info.status = SandboxStatus.STARTING
+                sandbox_info.exposed_urls = None
+                sandbox_info.session_api_key = None
+                return sandbox_info
             try:
                 # When running in Docker, replace localhost hostname with host.docker.internal for internal requests
                 app_server_url = replace_localhost_hostname_for_docker(app_server_url)
@@ -423,11 +432,12 @@ class DockerSandboxService(SandboxService):
             for exposed_port in self.exposed_ports:
                 env_vars[exposed_port.name] = str(exposed_port.container_port)
         else:
-            # Bridge network mode: map container ports to random host ports
+            # Bridge network mode: ask Docker to allocate free host ports. This
+            # avoids races with ports probed by this process, especially on
+            # Docker Desktop where a preselected port can fail to bind later.
             port_mappings = {}
             for exposed_port in self.exposed_ports:
-                host_port = self._find_unused_port()
-                port_mappings[exposed_port.container_port] = host_port
+                port_mappings[exposed_port.container_port] = None
                 env_vars[exposed_port.name] = str(exposed_port.container_port)
 
         # Prepare labels

@@ -89,6 +89,7 @@ from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
 from openhands.app_server.utils.git import ensure_valid_git_branch_name
+from openhands.app_server.utils.llm import SIRB_API_BASE
 from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
@@ -932,10 +933,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
     @staticmethod
     def _default_tools_for_llm(
-        model: str | None, include_default_tools: list[str] | None
+        model: str | None,
+        base_url: str | None,
+        include_default_tools: list[str] | None,
     ) -> list[str] | None:
         """Apply compatibility defaults for LLMs with fragile tool JSON output."""
-        if model in {'qwen3-coder-next', 'openai/qwen3-coder-next'}:
+        is_sirb = (base_url or '').rstrip('/') == SIRB_API_BASE
+        if is_sirb or model in {'qwen3-coder-next', 'openai/qwen3-coder-next'}:
             default_tools = include_default_tools or ['FinishTool']
             filtered_tools = [tool for tool in default_tools if tool != 'ThinkTool']
             return filtered_tools or ['FinishTool']
@@ -1360,7 +1364,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         agent = agent.model_copy(
             update={
                 'include_default_tools': self._default_tools_for_llm(
-                    llm.model, agent.include_default_tools
+                    llm.model, llm.base_url, agent.include_default_tools
                 )
             }
         )

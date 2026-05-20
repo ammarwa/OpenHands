@@ -2,10 +2,13 @@
 
 from openhands.app_server.utils import llm as llm_utils
 from openhands.app_server.utils.llm import (
+    SIRB_API_BASE,
     _assign_provider,
     _derive_verified_models,
     get_provider_api_base,
+    get_supported_llm_models,
     is_openhands_model,
+    resolve_llm_base_url,
 )
 
 
@@ -164,3 +167,22 @@ class TestGetProviderApiBase:
         # May return None or an API base depending on litellm behavior
         # The function should not raise an exception
         assert result is None or isinstance(result, str)
+
+
+class TestSirbModels:
+    """Tests for the built-in SIRB provider entry."""
+
+    def test_supported_models_include_sirb_provider(self):
+        response = get_supported_llm_models()
+
+        assert 'sirb/qwen3-coder-next' in response.models
+
+    def test_resolve_sirb_base_url(self):
+        assert (
+            resolve_llm_base_url(
+                'sirb/qwen3-coder-next',
+                None,
+                managed_proxy_url='https://proxy.example.com',
+            )
+            == SIRB_API_BASE
+        )

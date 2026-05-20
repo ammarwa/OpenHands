@@ -40,6 +40,8 @@ from openhands.app_server.user_auth import (
 )
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.app_server.utils.llm import (
+    SIRB_API_BASE,
+    SIRB_PROVIDER,
     get_provider_api_base,
     is_openhands_model,
     resolve_llm_base_url,
@@ -55,6 +57,35 @@ from openhands.sdk.settings import (
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
 )
+
+
+def _is_sirb_base_url(base_url: str | None) -> bool:
+    return (base_url or '').rstrip('/') == SIRB_API_BASE
+
+
+def _apply_sirb_llm_compat(llm: LLM) -> LLM:
+    """Normalize SIRB selections to LiteLLM's OpenAI-compatible route."""
+    update: dict[str, Any] = {}
+
+    if llm.model and llm.model.startswith(f'{SIRB_PROVIDER}/'):
+        update['model'] = f'openai/{llm.model.removeprefix(f"{SIRB_PROVIDER}/")}'
+        update['base_url'] = SIRB_API_BASE
+
+    base_url = update.get('base_url', llm.base_url)
+    if _is_sirb_base_url(base_url):
+        update.update(
+            {
+                'base_url': SIRB_API_BASE,
+                'force_string_serializer': True,
+                'native_tool_calling': True,
+                'disable_vision': True,
+                'caching_prompt': False,
+                'drop_params': True,
+                'modify_params': True,
+            }
+        )
+
+    return llm.model_copy(update=update) if update else llm
 
 # Create router with /api/v1/settings prefix
 router = APIRouter(
@@ -78,6 +109,9 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
         model=llm.model,
         base_url=llm.base_url,
         managed_proxy_url=LITE_LLM_API_URL,
+    )
+    settings.agent_settings = settings.agent_settings.model_copy(
+        update={'llm': _apply_sirb_llm_compat(llm)}
     )
 
 
@@ -159,7 +193,13 @@ async def load_settings(
 
         # If the base url matches the default for the provider, we don't send it
         # So that the frontend can display basic mode.
-        if is_openhands_model(llm.model):
+        if _is_sirb_base_url(llm.base_url):
+            if resp_llm.model and resp_llm.model.startswith('openai/'):
+                resp_llm.model = (
+                    f'{SIRB_PROVIDER}/{resp_llm.model.removeprefix("openai/")}'
+                )
+            resp_llm.base_url = None
+        elif is_openhands_model(llm.model):
             if normalized_base == normalized_proxy:
                 resp_llm.base_url = None
         elif llm.model and llm.base_url == get_provider_api_base(llm.model):
@@ -276,20 +316,22 @@ async def store_settings(
 
 @router.get('/agent-schema')
 async def load_settings_schema() -> dict[str, Any]:
-    """Load the schema for settings"""
+    """Load the schema for settings."""
     return export_agent_settings_schema().model_dump(mode='json')
 
 
 @router.get('/conversation-schema')
 async def load_conversation_settings_schema() -> dict[str, Any]:
-    """Load the schema for conversations"""
+    """Load the schema for conversations."""
     return ConversationSettings.export_schema().model_dump(mode='json')
 
 
 async def invalidate_legacy_secrets_store(
     settings: Settings, settings_store: SettingsStore, secrets_store: SecretsStore
 ) -> Secrets | None:
-    """We are moving `secrets_store` (a field from `Settings` object) to its own dedicated store
+    """Move legacy settings secrets into the secrets store.
+
+    We are moving `secrets_store` (a field from `Settings` object) to its own dedicated store.
     This function moves the values from Settings to Secrets, and deletes the values in Settings
     While this function in called multiple times, the migration only ever happens once
     """
@@ -505,6 +547,8 @@ async def save_profile(
                     llm = llm.model_copy(update={'api_key': existing.api_key})
         else:
             llm = settings.agent_settings.llm
+
+        llm = _apply_sirb_llm_compat(llm)
 
         try:
             settings.llm_profiles.save(

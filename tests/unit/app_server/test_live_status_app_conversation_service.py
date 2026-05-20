@@ -599,15 +599,20 @@ class TestLiveStatusAppConversationService:
 
     def test_default_tools_for_qwen_filters_think_tool(self):
         assert self.service._default_tools_for_llm(
-            'openai/qwen3-coder-next', ['FinishTool', 'ThinkTool']
+            'openai/qwen3-coder-next', None, ['FinishTool', 'ThinkTool']
         ) == ['FinishTool']
         assert self.service._default_tools_for_llm(
-            'qwen3-coder-next', None
+            'qwen3-coder-next', None, None
+        ) == ['FinishTool']
+        assert self.service._default_tools_for_llm(
+            'openai/another-sirb-model',
+            'https://api.sirb.run/v1',
+            ['FinishTool', 'ThinkTool'],
         ) == ['FinishTool']
 
     def test_default_tools_for_other_models_preserves_default_tools(self):
         assert self.service._default_tools_for_llm(
-            'openai/gpt-4o', ['FinishTool', 'ThinkTool']
+            'openai/gpt-4o', None, ['FinishTool', 'ThinkTool']
         ) == ['FinishTool', 'ThinkTool']
 
     @pytest.mark.asyncio

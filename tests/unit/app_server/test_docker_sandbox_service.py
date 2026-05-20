@@ -436,7 +436,7 @@ class TestDockerSandboxService:
         assert (
             call_args[1]['environment']['OH_SESSION_API_KEYS_0'] == 'test_session_key'
         )
-        assert call_args[1]['ports'] == {8000: 12345, 8001: 12346}
+        assert call_args[1]['ports'] == {8000: None, 8001: None}
         assert call_args[1]['working_dir'] == '/workspace'
         assert call_args[1]['detach'] is True
 
@@ -1143,6 +1143,24 @@ class TestDockerSandboxService:
         # Verify
         assert result is not None
         assert result.status == SandboxStatus.PAUSED
+        service.httpx_client.get.assert_not_called()
+
+    async def test_container_to_checked_sandbox_info_missing_agent_server_url(
+        self, service, mock_running_container
+    ):
+        """Test health check when the agent server port has no host binding yet."""
+        mock_running_container.attrs['NetworkSettings']['Ports'] = {
+            '8001/tcp': [{'HostPort': '12346'}],
+        }
+
+        result = await service._container_to_checked_sandbox_info(
+            mock_running_container
+        )
+
+        assert result is not None
+        assert result.status == SandboxStatus.STARTING
+        assert result.exposed_urls is None
+        assert result.session_api_key is None
         service.httpx_client.get.assert_not_called()
 
 
