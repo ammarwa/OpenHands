@@ -54,8 +54,9 @@ CLARIFAI_MODELS = [
 
 SIRB_PROVIDER = 'sirb'
 SIRB_API_BASE = 'https://api.sirb.run/v1'
+SIRB_MODEL = 'qwen3-coder-next'
 SIRB_MODELS = [
-    f'{SIRB_PROVIDER}/qwen3-coder-next',
+    f'{SIRB_PROVIDER}/{SIRB_MODEL}',
 ]
 
 # ---------------------------------------------------------------------------
@@ -308,8 +309,8 @@ def get_supported_llm_models(
 
     return ModelsResponse(
         models=unique_models,
-        verified_models=_derive_verified_models(openhands_models),
-        verified_providers=VERIFIED_PROVIDERS,
+        verified_models=_derive_verified_models(openhands_models) + [SIRB_MODEL],
+        verified_providers=VERIFIED_PROVIDERS + [SIRB_PROVIDER],
         default_model=DEFAULT_OPENHANDS_MODEL,
     )
 

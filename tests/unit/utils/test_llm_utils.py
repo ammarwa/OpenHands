@@ -176,6 +176,8 @@ class TestSirbModels:
         response = get_supported_llm_models()
 
         assert 'sirb/qwen3-coder-next' in response.models
+        assert 'qwen3-coder-next' in response.verified_models
+        assert 'sirb' in response.verified_providers
 
     def test_resolve_sirb_base_url(self):
         assert (

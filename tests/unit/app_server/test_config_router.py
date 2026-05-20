@@ -133,6 +133,22 @@ class TestToProviders:
         assert providers[0].name == 'openhands'
         assert providers[0].verified is True
 
+    def test_sirb_provider_is_verified(self):
+        providers = _to_providers(get_supported_llm_models())
+        sirb = next(p for p in providers if p.name == 'sirb')
+
+        assert sirb.verified is True
+
+    def test_sirb_model_is_verified(self):
+        models = _to_llm_models(get_supported_llm_models())
+        sirb_model = next(
+            m
+            for m in models
+            if m.provider == 'sirb' and m.name == 'qwen3-coder-next'
+        )
+
+        assert sirb_model.verified is True
+
     def test_contains_verified_and_unverified(self):
         providers = _to_providers(get_supported_llm_models())
 

@@ -25,6 +25,7 @@ from openhands.app_server.config_api.llm_model_service import (
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.utils.async_utils import call_sync_from_async
 from openhands.app_server.utils.llm import (
+    SIRB_MODELS,
     ModelsResponse,
     get_supported_llm_models,
 )
@@ -37,7 +38,7 @@ _VERIFIED_MODEL_SET: set[str] = {
     f'{provider}/{name}'
     for provider, models in VERIFIED_MODELS.items()
     for name in models
-}
+} | set(SIRB_MODELS)
 
 
 def _to_llm_models(models_response: ModelsResponse) -> list[LLMModel]:
@@ -61,7 +62,9 @@ def _to_llm_models(models_response: ModelsResponse) -> list[LLMModel]:
 
 
 def _to_providers(models_response: ModelsResponse) -> list[Provider]:
-    """Extract unique providers, sorted with ``openhands`` first, then other
+    """Extract unique providers.
+
+    Sorted with ``openhands`` first, then other
     verified providers alphabetically, then unverified providers alphabetically.
     """
     verified_set = set(models_response.verified_providers)
