@@ -356,6 +356,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             body_json = start_conversation_request.model_dump(
                 mode='json', context={'expose_secrets': True}
             )
+            # Workaround: ``openhands-sdk==1.21.1`` (pinned in pyproject.toml) does
+            # not yet expose ``user_id`` on ``StartConversationRequest`` (added in
+            # software-agent-sdk#3242). When we pass ``user_id=user.id`` to
+            # ``create_request(...)`` above, pydantic silently drops the unknown
+            # kwarg, so the user ID never reaches the agent-server JSON body and
+            # ``Laminar.set_trace_user_id()`` is never called. Inject it manually
+            # here — the agent-server (already on the new SDK) reads it from the
+            # body. Remove this once OpenHands pins to an SDK release that
+            # includes the ``user_id`` field.
+            user_id_for_trace = await self.user_context.get_user_id()
+            if user_id_for_trace:
+                body_json['user_id'] = user_id_for_trace
             headers = (
                 {'X-Session-API-Key': sandbox.session_api_key}
                 if sandbox.session_api_key
