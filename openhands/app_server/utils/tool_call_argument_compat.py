@@ -1,5 +1,6 @@
 """Compatibility parsing for provider-emitted tool call arguments."""
 
+import contextlib
 import json
 import logging
 import re
@@ -12,6 +13,24 @@ from openhands.sdk.agent import utils as sdk_agent_utils
 _logger = logging.getLogger(__name__)
 _original_parse_tool_call_arguments: Callable[[str], dict[str, Any]] = (
     sdk_agent_utils.parse_tool_call_arguments
+)
+_KNOWN_TOOL_ARGUMENT_KEYS = frozenset(
+    {
+        'command',
+        'path',
+        'file_text',
+        'old_str',
+        'new_str',
+        'insert_line',
+        'view_range',
+        'summary',
+        'security_risk',
+    }
+)
+_KEY_PATTERN = re.compile(
+    r'(?P<prefix>^|,)\s*"(?P<key>'
+    + '|'.join(sorted(_KNOWN_TOOL_ARGUMENT_KEYS))
+    + r')"\s*:'
 )
 
 
@@ -33,6 +52,70 @@ def _drop_dangling_json_tail(value: str) -> str:
     trimmed = re.sub(r',\s*$', '', value)
     trimmed = re.sub(r':\s*$', ': ""', trimmed)
     return re.sub(r',\s*([}\]])', r'\1', trimmed)
+
+
+def _decode_lenient_string(value: str) -> str:
+    value = value.strip()
+    while value.endswith('}'):
+        value = value[:-1].rstrip()
+    if value.startswith('"'):
+        value = value[1:]
+    if value.endswith('"'):
+        value = value[:-1]
+
+    try:
+        return json.loads(f'"{value}"', strict=False)
+    except json.JSONDecodeError:
+        return value.replace('\\n', '\n').replace('\\t', '\t').replace('\\"', '"')
+
+
+def _decode_lenient_value(value: str) -> Any:
+    value = value.strip()
+    while value.endswith('}') and value.count('{') < value.count('}'):
+        value = value[:-1].rstrip()
+    value = value.removesuffix(',').strip()
+    if not value:
+        return ''
+
+    try:
+        return json.loads(value, strict=False)
+    except json.JSONDecodeError:
+        if value.startswith('"'):
+            return _decode_lenient_string(value)
+        if value.lower() == 'null':
+            return None
+        if value.lower() == 'true':
+            return True
+        if value.lower() == 'false':
+            return False
+        with contextlib.suppress(ValueError):
+            return int(value)
+        return value
+
+
+def _parse_known_tool_arguments(raw_arguments: str) -> dict[str, Any] | None:
+    start = raw_arguments.find('{')
+    if start == -1:
+        return None
+
+    body = raw_arguments[start + 1 :].strip()
+    matches = list(_KEY_PATTERN.finditer(body))
+    if not matches:
+        return None
+
+    parsed: dict[str, Any] = {}
+    for index, match in enumerate(matches):
+        key = match.group('key')
+        value_start = match.end()
+        value_end = (
+            matches[index + 1].start('prefix')
+            if index + 1 < len(matches)
+            else len(body)
+        )
+        value = body[value_start:value_end]
+        parsed[key] = _decode_lenient_value(value)
+
+    return parsed
 
 
 def _close_truncated_json_object(raw_arguments: str) -> str | None:
@@ -91,6 +174,13 @@ def parse_tool_call_arguments_compat(raw_arguments: str) -> dict[str, Any]:
                 _logger.warning('Repaired malformed tool call arguments for execution')
                 return sdk_agent_utils._normalize_arguments(parsed)
 
+        parsed = _parse_known_tool_arguments(raw_arguments)
+        if parsed is not None:
+            _logger.warning(
+                'Repaired malformed tool call arguments with lenient field parser'
+            )
+            return sdk_agent_utils._normalize_arguments(parsed)
+
         raise
 
 
@@ -98,4 +188,3 @@ def install_tool_call_argument_compat() -> None:
     """Install the parser shim into SDK modules imported by the app server."""
     sdk_agent_utils.parse_tool_call_arguments = parse_tool_call_arguments_compat
     sdk_agent_module.parse_tool_call_arguments = parse_tool_call_arguments_compat
-

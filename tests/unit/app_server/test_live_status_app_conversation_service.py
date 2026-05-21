@@ -643,6 +643,38 @@ class TestLiveStatusAppConversationService:
 
         assert parsed == {'command': 'echo hello', 'summary': ''}
 
+    def test_tool_call_argument_parser_repairs_file_editor_with_unescaped_quotes(self):
+        parsed = parse_tool_call_arguments_compat(
+            '{"command": "str_replace", '
+            '"path": "/workspace/project/app.py", '
+            '"old_str": "print("old")\\nvalue = 1", '
+            '"new_str": "print("new")\\nvalue = 2", '
+            '"summary": "Update print call"'
+        )
+
+        assert parsed == {
+            'command': 'str_replace',
+            'path': '/workspace/project/app.py',
+            'old_str': 'print("old")\nvalue = 1',
+            'new_str': 'print("new")\nvalue = 2',
+            'summary': 'Update print call',
+        }
+
+    def test_tool_call_argument_parser_repairs_truncated_file_editor_payload(self):
+        parsed = parse_tool_call_arguments_compat(
+            '{"command": "insert", '
+            '"path": "/workspace/project/app.py", '
+            '"insert_line": 4, '
+            '"new_str": "def hello():\\n    return "world"'
+        )
+
+        assert parsed == {
+            'command': 'insert',
+            'path': '/workspace/project/app.py',
+            'insert_line': 4,
+            'new_str': 'def hello():\n    return "world',
+        }
+
     def test_tools_for_other_models_preserves_task_tracker(self):
         tools = [
             SimpleNamespace(name='terminal'),
